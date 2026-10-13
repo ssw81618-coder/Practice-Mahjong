@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>台灣十六張麻將 何切牌理練習器 (16+1張)</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Font Awesome CDN -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <style>
+    /* 擬真毛呢牌桌 */
+    .felt-table {
+      background-color: #0d462b;
+      background-image: 
+        radial-gradient(circle at 50% 45%, rgba(32, 128, 77, 0.4) 0%, rgba(10, 48, 29, 0.95) 85%),
+        radial-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+      background-size: 100% 100%, 14px 14px;
+      box-shadow: inset 0 0 80px rgba(0, 0, 0, 0.65);
+    }
+
+    /* 擬真實體麻將牌（象牙白溫潤倒角 + 樹脂立體陰影） */
+    .real-tile {
+      position: relative;
+      background: linear-gradient(170deg, #ffffff 0%, #fdfbf7 55%, #f1ebe0 100%);
+      border-radius: 7px;
+      border: 1px solid #d4c8af;
+      box-shadow: 
+        0 1px 0 #fff inset,
+        0 -3px 0 #a89470 inset,
+        1px 3px 6px rgba(0, 0, 0, 0.4),
+        0 6px 12px rgba(0, 0, 0, 0.25);
+      transition: transform 0.16s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.16s ease, border-color 0.16s;
+      cursor: pointer;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .real-tile:hover:not(.disabled-tile) {
+      transform: translateY(-8px) scale(1.03);
+      box-shadow: 
+        0 1px 0 #fff inset,
+        0 -3px 0 #9f885e inset,
+        0 14px 20px rgba(0, 0, 0, 0.45),
+        0 0 0 2px #f59e0b;
+      border-color: #f59e0b;
+      z-index: 20;
+    }
+
+    .real-tile:active:not(.disabled-tile) {
+      transform: translateY(-2px);
+    }
+
+    .real-tile.selected {
+      transform: translateY(-14px);
+      box-shadow: 
+        0 0 0 3px #fbbf24,
+        0 16px 24px rgba(0, 0, 0, 0.6);
+      z-index: 30;
+    }
+
+    /* 手牌尺寸設定 */
+    .tile-hand {
+      width: 44px;
+      height: 64px;
+      padding: 3px 2px;
+    }
+    @media (min-width: 640px) {
+      .tile-hand {
+        width: 50px;
+        height: 72px;
+        padding: 4px 3px;
+      }
+    }
+    @media (min-width: 1024px) {
+      .tile-hand {
+        width: 56px;
+        height: 80px;
+        padding: 4px 3px;
+      }
+    }
+
+    /* 牌河 / 副露小牌尺寸 */
+    .tile-river {
+      width: 32px;
+      height: 46px;
+      padding: 2px 1.5px;
+      border-radius: 4px;
+      box-shadow: 0 1px 0 #fff inset, 0 -2px 0 #ab9874 inset, 0 3px 5px rgba(0, 0, 0, 0.4);
+    }
+    @media (min-width: 640px) {
+      .tile-river {
+        width: 36px;
+        height: 52px;
+        padding: 2.5px 2px;
+      }
+    }
+
+    /* 捲軸美化 */
+    ::-webkit-scrollbar {
+      height: 6px;
+      width: 6px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+  </style>
+</head>
+<body class="bg-stone-950 text-stone-100 min-h-screen flex flex-col font-sans select-none antialiased">
+
+  <!-- 頂部資訊列 -->
+  <header class="bg-stone-900/90 border-b border-stone-800 backdrop-blur sticky top-0 z-40 px-3 sm:px-6 py-2.5 shadow-md">
+    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-lg bg-emerald-800 border border-emerald-600 flex items-center justify-center text-amber-300 font-bold shadow-inner">
+          🀄
+        </div>
+        <div>
+          <h1 class="text-base sm:text-lg font-bold text-amber-300 flex items-center gap-2">
+            台麻16張 何切牌理練習器
+            <span class="text-[11px] bg-emerald-950 text-emerald-300 px-2 py-0.5 rounded border border-emerald-700">經典牌圖版</span>
+          </h1>
+          <p class="text-[11px] text-stone-400">16+1張實戰決策 • 螺絲骨複合搭 • 牌河死牌枚數分析</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-3 text-xs sm:text-sm">
+        <div class="flex items-center gap-2 bg-stone-950 px-3 py-1.5 rounded-lg border border-stone-800">
+          <span>累計: <strong id="stat-total" class="text-amber-400">0</strong></span>
+          <span class="text-stone-700">|</span>
+          <span>正解率: <strong id="stat-accuracy" class="text-emerald-400">0%</strong></span>
+          <span class="text-stone-700">|</span>
+          <span>連對: <strong id="stat-streak" class="text-orange-400">0</strong> 🔥</span>
+        </div>
+        <button onclick="toggleModal(true)" class="p-2 bg-stone-800 hover:bg-stone-700 rounded-lg text-stone-300 hover:text-white transition" title="牌理指南">
+          <i class="fa-solid fa-book-open"></i>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="flex-1 max-w-7xl w-full mx-auto p-2 sm:p-4 md:p-6 flex flex-col gap-4">
+    
+    <!-- 難度選擇與題目切換 -->
+    <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-stone-900 p-2.5 rounded-xl border border-stone-800">
+      <div class="grid grid-cols-3 gap-1 bg-stone-950 p-1 rounded-lg border border-stone-800 text-xs sm:text-sm font-medium">
+        <button id="btn-easy" onclick="changeDifficulty('easy')" class="px-3 py-1.5 rounded-md transition flex items-center justify-center gap-1.5">
+          <i class="fa-solid fa-leaf text-emerald-400"></i>
+          <span>1. 簡單手牌</span>
+        </button>
+        <button id="btn-hard" onclick="changeDifficulty('hard')" class="px-3 py-1.5 rounded-md transition flex items-center justify-center gap-1.5">
+          <i class="fa-solid fa-fire text-orange-400"></i>
+          <span>2. 困難複合</span>
+        </button>
+        <button id="btn-master" onclick="changeDifficulty('master')" class="px-3 py-1.5 rounded-md transition flex items-center justify-center gap-1.5">
+          <i class="fa-solid fa-chess-board text-purple-400"></i>
+          <span>3. 牌河實戰</span>
+        </button>
+      </div>
+
+      <div class="flex items-center justify-between sm:justify-end gap-2 text-xs">
+        <span id="question-index-tag" class="text-stone-400 font-mono">第 1 / 3 題</span>
+        <button onclick="prevQuestion()" class="px-2.5 py-1.5 bg-stone-800 hover:bg-stone-700 rounded text-stone-200 border border-stone-700 transition">上一題</button>
+        <button onclick="nextQuestion()" class="px-2.5 py-1.5 bg-stone-800 hover:bg-stone-700 rounded text-stone-200 border border-stone-700 transition">下一題</button>
+        <button onclick="randomQuestion()" class="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 rounded font-bold text-white transition flex items-center gap-1">
+          <i class="fa-solid fa-shuffle"></i> 隨機
+        </button>
+      </div>
+    </div>
+
+    <!-- 麻將牌桌本體 -->
+    <div class="felt-table border-[10px] sm:border-[14px] border-[#5a2e17] rounded-3xl p-3 sm:p-6 flex flex-col justify-between gap-5 min-h-[520px] shadow-2xl relative">
+      
+      <!-- 局況與模式狀態 -->
+      <div class="flex items-center justify-between border-b border-emerald-900/60 pb-2 text-xs sm:text-sm">
+        <div class="flex items-center gap-2">
+          <span class="bg-black/50 text-amber-300 font-bold px-3 py-1 rounded-full border border-amber-500/30 flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span id="game-situation">東風東局 • 自家莊家</span>
+          </span>
+          <span id="question-theme-desc" class="text-emerald-200/80 text-xs hidden sm:inline"></span>
+        </div>
+        <span id="difficulty-badge" class="px-2.5 py-0.5 rounded text-xs font-semibold bg-emerald-950 text-emerald-300 border border-emerald-700">
+          簡單入門
+        </span>
+      </div>
+
+      <!-- 牌河展示區 (第3難度會充實顯示) -->
+      <div id="river-box" class="bg-black/35 backdrop-blur rounded-2xl p-3 border border-emerald-900/50 min-h-[140px] flex flex-col justify-center">
+        <div class="text-[11px] font-semibold text-emerald-300/80 mb-2 flex items-center justify-between">
+          <span class="flex items-center gap-1.5"><i class="fa-solid fa-water"></i> 牌河捨牌狀況 (四家出牌)</span>
+          <span id="river-notice" class="text-stone-400 text-[10px]">※ 請留意已現死牌與可能聽牌現物</span>
+        </div>
+        <div id="river-grid" class="flex flex-wrap gap-1.5 sm:gap-2 items-center min-h-[52px]">
+          <!-- 動態注入牌河牌 -->
+        </div>
+      </div>
+
+      <!-- 副露區 (已吃碰槓面子) -->
+      <div id="melds-box" class="flex flex-wrap items-center justify-end gap-2.5 min-h-[46px]">
+        <!-- 動態注入已吃碰副露 -->
+      </div>
+
+      <!-- 玩家手牌區 (16張 + 摸入第17張) -->
+      <div class="flex flex-col gap-2 pt-2">
+        <div class="flex items-center justify-between text-xs text-emerald-200/90 px-1 font-medium">
+          <div class="flex items-center gap-2">
+            <span>手牌 (<span id="hand-tiles-count">16</span>+1張)</span>
+            <span class="text-amber-300 text-[11px] bg-amber-950/70 px-2 py-0.5 rounded border border-amber-700/50">請點擊您決定打出（何切）的那一張牌</span>
+          </div>
+          <span class="text-stone-300 text-xs">摸入牌在右側 👉</span>
+        </div>
+
+        <!-- 牌列架構 -->
+        <div class="flex flex-wrap sm:flex-nowrap items-end justify-center gap-1 sm:gap-1.5 overflow-x-auto p-2 sm:p-4 bg-stone-950/50 rounded-2xl border border-emerald-900/40">
+          <!-- 既有手牌 -->
+          <div id="hand-tiles-tray" class="flex items-end gap-0.5 sm:gap-1 flex-wrap sm:flex-nowrap justify-center">
+            <!-- 動態生成麻將牌 -->
+          </div>
+
+          <!-- 分隔光線 -->
+          <div class="w-2 sm:w-4 flex items-center justify-center text-amber-400/40 text-xs mx-1">
+            <i class="fa-solid fa-ellipsis-vertical hidden sm:inline"></i>
+          </div>
+
+          <!-- 摸牌區 -->
+          <div class="flex flex-col items-center">
+            <span class="text-[10px] text-amber-300 font-bold mb-1 tracking-widest uppercase">摸牌</span>
+            <div id="drawn-tile-tray">
+              <!-- 動態生成摸入牌 -->
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- 判定結果與牌理解說面板 -->
+    <section id="result-panel" class="hidden bg-stone-900 border border-stone-700 rounded-2xl p-4 sm:p-6 shadow-2xl transition-all">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-stone-800 pb-4 mb-4">
+        <div class="flex items-center gap-3.5">
+          <div id="result-icon-box" class="w-12 h-12 rounded-xl flex items-center justify-center text-2xl font-bold shadow-lg"></div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h3 id="result-title" class="text-xl sm:text-2xl font-bold"></h3>
+              <span id="result-badge" class="text-xs px-2.5 py-0.5 rounded font-bold"></span>
+            </div>
+            <p id="result-subtitle" class="text-xs sm:text-sm text-stone-400 mt-0.5">點擊各行分析查看進張數與機率詳細比較</p>
+          </div>
+        </div>
+
+        <button onclick="nextQuestion()" class="self-start sm:self-center px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg shadow text-sm flex items-center gap-2 transition">
+          <span>挑戰下一題</span>
+          <i class="fa-solid fa-arrow-right"></i>
+        </button>
+      </div>
+
+      <!-- 選擇對照欄 -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3.5 mb-5">
+        <div class="bg-stone-950 p-3 rounded-xl border border-stone-800 flex items-center gap-3">
+          <span class="text-xs text-stone-400 font-medium">您的選擇：</span>
+          <div id="compare-user-tile" class="flex items-center gap-2"></div>
+        </div>
+        <div class="bg-stone-950 p-3 rounded-xl border border-stone-800 flex items-center gap-3">
+          <span class="text-xs text-stone-400 font-medium">最佳何切：</span>
+          <div id="compare-best-tile" class="flex items-center gap-2"></div>
+        </div>
+        <div class="bg-stone-950 p-3 rounded-xl border border-stone-800 flex flex-col justify-center">
+          <span class="text-xs text-stone-400 font-medium">進張牌效差異：</span>
+          <div id="compare-diff-text" class="text-sm font-bold text-amber-300 mt-0.5">--</div>
+        </div>
+      </div>
+
+      <!-- 深度解說與進張機率清單 -->
+      <div class="space-y-4">
+        <div class="bg-emerald-950/30 border border-emerald-800/40 p-4 rounded-xl text-stone-200">
+          <h4 class="text-emerald-300 font-bold text-sm flex items-center gap-2 mb-2">
+            <i class="fa-solid fa-brain text-emerald-400"></i> 牌理深度解說
+          </h4>
+          <div id="explanation-content" class="text-sm leading-relaxed text-stone-300 space-y-1.5"></div>
+        </div>
+
+        <!-- 橫向比較表 -->
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs sm:text-sm border-collapse bg-stone-950 rounded-xl overflow-hidden border border-stone-800">
+            <thead>
+              <tr class="bg-stone-800/80 text-stone-300 border-b border-stone-700">
+                <th class="p-3">捨牌選擇</th>
+                <th class="p-3">打法評級</th>
+                <th class="p-3">有效進張牌 (種類)</th>
+                <th class="p-3 text-right">剩餘枚數 (扣除牌河)</th>
+                <th class="p-3">牌效點評</th>
+              </tr>
+            </thead>
+            <tbody id="comparison-tbody" class="divide-y divide-stone-800/60 font-sans">
+              <!-- 動態生成表格列 -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- 心法提示卡 -->
+        <div class="bg-stone-800/40 border border-stone-700/60 rounded-xl p-3 flex items-start gap-2.5 text-xs text-stone-300">
+          <i class="fa-solid fa-lightbulb text-amber-400 mt-0.5 text-sm"></i>
+          <div>
+            <strong class="text-amber-200">台麻16張 核心心法：</strong>
+            <span id="card-tip-text">台麻需五面子一將牌。螺絲骨（如 3445萬）與雙面帶對（如 233萬）進張極廣，不可過早定型。</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- 牌理手冊彈窗 -->
+  <div id="rules-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-stone-900 border border-stone-700 rounded-2xl max-w-2xl w-full p-5 sm:p-6 text-stone-200 max-h-[90vh] overflow-y-auto space-y-4">
+      <div class="flex items-center justify-between border-b border-stone-800 pb-3">
+        <h3 class="text-lg font-bold text-amber-300 flex items-center gap-2">
+          <i class="fa-solid fa-book-bookmark text-emerald-400"></i> 台麻16張牌理秘訣
+        </h3>
+        <button onclick="toggleModal(false)" class="text-stone-400 hover:text-white text-lg">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div class="text-xs sm:text-sm space-y-3 leading-relaxed text-stone-300">
+        <div class="bg-stone-950 p-3 rounded-lg border border-stone-800">
+          <h4 class="font-bold text-emerald-400 mb-1">一、五面子一雀頭架構</h4>
+          <p>台麻胡牌需 17 張牌（5 組順子/刻子 + 1 對眼）。手牌搭子總數需比 13 張麻將多維持一組，因此「搭子超載（搭子過多）」時拆弱搭（坎張、偏張）的次序直接決定成牌速度。</p>
+        </div>
+        <div class="bg-stone-950 p-3 rounded-lg border border-stone-800">
+          <h4 class="font-bold text-amber-300 mb-1">二、經典複合搭（螺絲骨 / 雙面帶雀頭）</h4>
+          <p><strong>3445萬（螺絲骨）</strong>：摸 2、5萬成兩面順子保留 44萬雀頭；摸 4萬成刻子帶 35萬坎張，摸 3、6萬成雙順子。牌效高達 18~20 枚，切忌當作一般對子拆掉！</p>
+        </div>
+        <div class="bg-stone-950 p-3 rounded-lg border border-stone-800">
+          <h4 class="font-bold text-purple-400 mb-1">三、牌河死牌與實戰枚數</h4>
+          <p>兩面搭進張名義上是 8 枚，但若牌河中對家與下家合計已打出 5 枚，實質僅剩 3 枚，牌效便低於場上未見過之乾淨坎張（4枚）。進中後巡必須同步衡量放銃危險度與真實剩餘牌數。</p>
+        </div>
+      </div>
+
+      <div class="flex justify-end pt-2">
+        <button onclick="toggleModal(false)" class="px-5 py-2 bg-emerald-700 hover:bg-emerald-600 rounded-lg text-white font-medium text-xs sm:text-sm">
+          關閉手冊
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /**
+     * 擬真經典麻將牌 SVG 繪製引擎
+     * 參照經典台灣/日麻標準花紋：
+     * - 萬子：正統正楷傳統漢字
+     * - 筒子：經典四花瓣/齒輪同心同軸紋
+     * - 條子：一條靈動綠孔雀、條子經典紅綠雙節鏈
+     * - 字牌：正統毛筆黑字、鮮紅中、深綠發、迴紋雕花框白板
+     */
+
+    // SVG 色彩標準
+    const COLOR_RED = '#b91c1c';
+    const COLOR_GREEN = '#15803d';
+    const COLOR_BLUE = '#1e3a8a';
+    const COLOR_BLACK = '#18181b';
+
+    // 繪製單個經典筒子輪花 (Pin)
+    function drawPinWheel(cx, cy, r, color = COLOR_BLUE, hasCenterDot = true) {
+      return `
+        <g transform="translate(${cx}, ${cy})">
+          <!-- 外齒輪圓圈 -->
+          <circle cx="0" cy="0" r="${r}" fill="none" stroke="${color}" stroke-width="${r * 0.18}"/>
+          <!-- 內部四葉/六葉花瓣幾何 -->
+          <circle cx="0" cy="0" r="${r * 0.65}" fill="none" stroke="${color}" stroke-width="${r * 0.12}"/>
+          <!-- 輻射花瓣切線 -->
+          <path d="M 0 -${r * 0.85} L 0 ${r * 0.85} M -${r * 0.85} 0 L ${r * 0.85} 0" stroke="${color}" stroke-width="${r * 0.14}"/>
+          <!-- 45度花瓣 -->
+          <path d="M -${r * 0.6} -${r * 0.6} L ${r * 0.6} ${r * 0.6} M -${r * 0.6} ${r * 0.6} L ${r * 0.6} -${r * 0.6}" stroke="${color}" stroke-width="${r * 0.12}"/>
+          ${hasCenterDot ? `<circle cx="0" cy="0" r="${r * 0.28}" fill="${COLOR_RED}"/>` : ''}
+        </g>
+      `;
+    }
+
+    // 繪製單個經典雙節鏈條 (Bamboo)
+    function drawBambooStick(cx, cy, length = 18, color = COLOR_GREEN) {
+      const w = 4.2;
+      const h2 = length / 2;
+      return `
+        <g transform="translate(${cx}, ${cy})">
+          <!-- 上節骨 -->
+          <path d="M -${w/2} -${h2} C -${w} -${h2*0.5}, -${w} -${h2*0.2}, -${w/2} 0 C ${w} -${h2*0.2}, ${w} -${h2*0.5}, ${w/2} -${h2} Z" fill="${color}"/>
+          <!-- 下節骨 -->
+          <path d="M -${w/2} 0 C -${w} ${h2*0.2}, -${w} ${h2*0.5}, -${w/2} ${h2} C ${w} ${h2*0.5}, ${w} ${h2*0.2}, ${w/2} 0 Z" fill="${color}"/>
+          <!-- 中間紅心微凹 -->
+          <circle cx="0" cy="0" r="1.2" fill="${COLOR_RED}"/>
+          <line x1="0" y1="-${h2*0.7}" x2="0" y2="-${h2*0.2}" stroke="#fff" stroke-width="0.8" opacity="0.6"/>
+          <line x1="0" y1="${h2*0.2}" x2="0" y2="${h2*0.7}" stroke="#fff" stroke-width="0.8" opacity="0.6"/>
+        </g>
+      `;
+    }
+
+    // 一條 (孔雀 / 麻雀) 精緻經典圖紋
+    function drawBirdOneBamboo() {
+      return `
+        <g transform="translate(32, 44) scale(0.64)">
+          <!-- 孔雀尾羽外輪廓 -->
+          <path d="M -22 -35 C -35 -15, -30 15, -12 25 C -5 28, 5 28, 12 25 C 30 15, 35 -15, 22 -35 C 10 -45, -10 -45, -22 -35 Z" fill="#15803d" opacity="0.95"/>
+          <!-- 尾羽羽眼花紋 -->
+          <circle cx="-14" cy="-20" r="5" fill="#facc15"/><circle cx="-14" cy="-20" r="2.5" fill="#b91c1c"/>
+          <circle cx="0" cy="-30" r="5.5" fill="#facc15"/><circle cx="0" cy="-30" r="2.8" fill="#b91c1c"/>
+          <circle cx="14" cy="-20" r="5" fill="#facc15"/><circle cx="14" cy="-20" r="2.5" fill="#b91c1c"/>
+          <circle cx="-7" cy="-10" r="4.5" fill="#facc15"/><circle cx="-7" cy="-10" r="2.2" fill="#b91c1c"/>
+          <circle cx="7" cy="-10" r="4.5" fill="#facc15"/><circle cx="7" cy="-10" r="2.2" fill="#b91c1c"/>
+          
+          <!-- 鳥身胸腹部 -->
+          <path d="M -7 0 C -12 10, -10 24, 0 32 C 10 24, 12 10, 7 0 Z" fill="#b91c1c"/>
+          <!-- 鳥首與冠羽 -->
+          <circle cx="0" cy="-6" r="6.5" fill="#b91c1c"/>
+          <path d="M -2 -12 L 0 -22 L 2 -12 Z" fill="#15803d"/>
+          <!-- 喙與眼睛 -->
+          <polygon points="-8,-6 -1,-8 -2,-3" fill="#facc15"/>
+          <circle cx="-2" cy="-7" r="1.2" fill="#fff"/>
+          <circle cx="-2" cy="-7" r="0.6" fill="#000"/>
+          <!-- 爪支架竹枝 -->
+          <path d="M -10 32 C 0 34, 10 34, 12 36" stroke="#15803d" stroke-width="3" stroke-linecap="round" fill="none"/>
+          <path d="M -4 31 L -6 38 M 4 31 L 6 38" stroke="#facc15" stroke-width="2"/>
+        </g>
+      `;
+    }
+
+    // 經典白板：立體幾何雙重回紋框
+    function drawWhiteTileBorder() {
+      return `
+        <g transform="translate(10, 11)">
+          <!-- 外回紋框 -->
+          <rect x="0" y="0" width="44" height="66" rx="4" fill="none" stroke="${COLOR_BLUE}" stroke-width="2.6"/>
+          <!-- 內部波浪幾何花邊 -->
+          <rect x="3.5" y="3.5" width="37" height="59" rx="2" fill="none" stroke="${COLOR_BLUE}" stroke-width="1" stroke-dasharray="2.5 1.5"/>
+        </g>
+      `;
+    }
+
+    // 取得指定麻將牌的完整 SVG 代碼
+    function getTileSvg(tileKey) {
+      const type = tileKey[1];
+      const val = parseInt(tileKey[0], 10);
+
+      let content = '';
+
+      // 1. 萬子 (1m ~ 9m)
+      if (type === 'm') {
+        const chineseDigits = ['', '一', '二', '三', '四', '伍', '六', '七', '八', '九'];
+        const numChar = chineseDigits[val] || '';
+        content = `
+          <!-- 上方黑色/紅色傳統楷體大字 -->
+          <text x="32" y="38" font-family="'Noto Serif TC', 'Kaiti', 'BiauKai', serif" font-weight="900" font-size="28" fill="${COLOR_BLACK}" text-anchor="middle" dominant-baseline="central">${numChar}</text>
+          <!-- 下方經典萬字 (鮮紅) -->
+          <text x="32" y="65" font-family="'Noto Serif TC', 'Kaiti', 'BiauKai', serif" font-weight="900" font-size="26" fill="${COLOR_RED}" text-anchor="middle" dominant-baseline="central">萬</text>
+        `;
+      }
+      
+      // 2. 筒子 (1p ~ 9p)
+      else if (type === 'p') {
+        if (val === 1) {
+          content = `
+            <g transform="translate(32, 44)">
+              <!-- 一筒外層大輪盤 -->
+              <circle cx="0" cy="0" r="22" fill="none" stroke="${COLOR_GREEN}" stroke-width="3.5"/>
